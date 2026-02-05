@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -128,14 +129,20 @@ func (c *Client) logRaw(mode, server string, req, resp *dns.Msg) {
 }
 
 func NormalizeServer(server string) string {
-	if strings.Contains(server, ":") {
-		if strings.Count(server, ":") > 1 && !strings.Contains(server, "]") {
-			return "[" + server + "]:53"
-		}
-		if strings.HasSuffix(server, ":53") || strings.Contains(server, "]:") {
+	if server == "" {
+		return server
+	}
+	if strings.HasPrefix(server, "[") {
+		if strings.Contains(server, "]:") {
 			return server
 		}
 		return server + ":53"
+	}
+	if _, _, err := net.SplitHostPort(server); err == nil {
+		return server
+	}
+	if strings.Contains(server, ":") {
+		return "[" + server + "]:53"
 	}
 	return server + ":53"
 }
