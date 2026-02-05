@@ -1,0 +1,98 @@
+schema: openspec/v1
+name: dnstrace
+version: 0.1.0
+
+context: |
+  Build a CLI tool "dnstrace" that behaves like `dig +trace` but adds diagnostics:
+  - Iteratively walk DNS delegation chain: root -> TLD -> authoritative
+  - Query for a specific name + RRtype
+  - Follow CNAME/DNAME where applicable
+  - Identify and explain where/why resolution fails:
+    - NXDOMAIN vs NODATA
+    - Broken delegation / missing glue / unreachable NS
+    - Lame delegation (NS not authoritative)
+    - SERVFAIL/timeouts (with hints)
+  - Provide a clear, evidence-based trace (which server said what, with SOA/NS where relevant)
+
+goals:
+  - Produce deterministic, non-recursive trace (RD=0) by default
+  - Parallel query candidate nameservers at each hop (with time budget) and pick best/consistent answers
+  - Emit a human-readable explanation plus a machine-readable JSON output
+  - Be portable: single static binary (Go)
+
+non_goals:
+  - Implement a full recursive caching resolver
+  - Replace system resolver configuration management
+  - Authoritative zone transfers or dynamic DNS updates
+
+inputs:
+  - name: fqdn
+    type: string
+    required: true
+    examples: ["api.example.com", "_acme-challenge.example.com"]
+  - name: rrtype
+    type: enum
+    required: true
+    values: ["A", "AAAA", "CNAME", "TXT", "MX", "NS", "SOA", "SRV", "PTR"]
+  - name: flags
+    type: object
+    required: false
+    fields:
+      dnssec:
+        type: boolean
+        default: false
+      transport:
+        type: enum
+        values: ["udp", "tcp", "auto"]
+        default: "auto"
+      max_time:
+        type: duration
+        default: "2s"
+      max_hops:
+        type: integer
+        default: 32
+      parallelism:
+        type: integer
+        default: 6
+      output:
+        type: enum
+        values: ["pretty", "json"]
+        default: "pretty"
+      resolver_compare:
+        type: array
+        description: "Optional: compare results via recursive resolvers (DoH/UDP), separate from authoritative trace."
+        items:
+          type: string
+        default: []
+
+outputs:
+  - name: trace_steps
+    type: array
+    description: "Ordered list of queries/responses performed during the trace."
+  - name: diagnosis
+    type: object
+    description: "High-level classification and explanation of success/failure."
+  - name: timings
+    type: object
+    description: "RTT and timeout info per hop and per server."
+
+architecture:
+  language: go
+  conventions:
+    - Use context.Context for timeouts and cancellation
+    - Separate packages for CLI, DNS client, trace logic, and analysis
+    - Use interfaces to abstract DNS transport (UDP/TCP) and allow testing
+    - use alecthomas/kong for CLI parsing
+    - use charmbracelet/lipgloss for output styling
+    - use uber/zap for logging where needed, and ensure there's a verbose/debug mode that includes raw DNS messages in the output
+    - use miekg/dns for DNS message construction and parsing, but implement our own retry and transport logic to meet the specific needs of this tool
+  modules:
+    - name: cmd/dnstrace
+      responsibility: "CLI parsing, wiring, rendering, exit codes"
+    - name: internal/dnsclient
+      responsibility: "DNS message building, UDP/TCP send/recv, retries, EDNS0, timeouts"
+    - name: internal/trace
+      responsibility: "Delegation walk (root->...), zone cut detection, next-authority selection"
+    - name: internal/analyze
+      responsibility: "Classify outcomes: NXDOMAIN/NODATA/broken delegation/lame/SERVFAIL; produce explanation"
+    - name: internal/
