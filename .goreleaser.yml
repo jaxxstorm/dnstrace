@@ -1,0 +1,48 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: dnstrace
+    binary: dnstrace
+    main: ./cmd/dnstrace
+    goos:
+      - darwin
+      - windows
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-X main.Version={{.Version}}"
+
+archives:
+  - id: dnstrace
+    format: tar.gz
+    builds:
+      - dnstrace
+    name_template: "{{ .Binary }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+brews:
+  - name: dnstrace
+    repository:
+      owner: jaxxstorm
+      name: homebrew-tap
+    commit_author:
+      name: GitHub Actions
+      email: bot@leebriggs.co.uk
+    directory: Formula
+    homepage: "https://leebriggs.co.uk"
+    description: "Trace DNS delegation and explain resolution failures."

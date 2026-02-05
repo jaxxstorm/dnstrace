@@ -14,9 +14,12 @@ import (
 	"go.uber.org/zap"
 )
 
+var Version = "dev"
+
 type CLI struct {
 	Ladder LadderCmd `cmd:"" default:"withargs" help:"Resolver ladder trace (default)."`
 	Trace  TraceCmd  `cmd:"trace" help:"Authoritative delegation trace (root -> TLD -> authoritative)."`
+	Version VersionCmd `cmd:"version" help:"Print version."`
 }
 
 type LadderCmd struct {
@@ -44,12 +47,19 @@ type TraceCmd struct {
 	Debug       bool          `help:"Enable debug logging (includes raw DNS messages)."`
 }
 
+type VersionCmd struct{}
+
 func main() {
 	cli := CLI{}
 	ctx := kong.Parse(&cli,
 		kong.Name("dnstrace"),
 		kong.Description("Trace DNS delegation and explain resolution failures."),
 	)
+
+	if ctx.Selected() != nil && ctx.Selected().Name == "version" {
+		fmt.Println(Version)
+		return
+	}
 
 	if ctx.Command() == "trace <fqdn> [<rrtype>]" || ctx.Selected().Name == "trace" {
 		logger, err := newLogger(cli.Trace.Verbose, cli.Trace.Debug)
